@@ -6,13 +6,58 @@ Built as a portfolio project to demonstrate solid software engineering: clear ar
 
 ## Current status
 
-**Phase 2 — Backend core (in progress).** The domain model exists: users,
-categories, tickets and their audit-trail events, with migrations applied.
-The API still only exposes the health check — CRUD comes next.
+**Phase 2 — Milestone 2 complete: Ticket API.** The domain model exists
+(users, categories, tickets and audit-trail events) and the API now exposes
+full ticket management through the Routes → Services → Repositories stack.
 
 - `GET /api/health` → `200 {"status": "ok"}` (lightweight, no database query)
+- Ticket endpoints: create, list (paginated + filters), get, partial update
+  with status machine, audit events and a consistent JSON error envelope
 - PostgreSQL 17 + Flask-SQLAlchemy + Flask-Migrate wired up
 - Domain model: `User`, `Category`, `Ticket`, `TicketEvent` (migration applied)
+- Idempotent development seed: `flask seed`
+
+## API
+
+All endpoints live under `/api`. Errors always return
+`{"error": {"code": "...", "message": "..."}}`.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/health` | Liveness check |
+| `POST` | `/api/tickets` | Create a ticket → `201` |
+| `GET` | `/api/tickets` | List tickets: `page`/`per_page` + filters `status`, `priority`, `category_id`, `assignee_id`, `requester_id` |
+| `GET` | `/api/tickets/<ticket_number>` | Fetch one ticket by its public id (`SUP-000001`) |
+| `PATCH` | `/api/tickets/<ticket_number>` | Partial update: `title`, `description`, `status`, `priority`, `assignee_id`, `category_id` |
+
+Rules worth knowing:
+
+- **`POST`** accepts only `title`, `description`, `requester_id` (plus optional
+  `priority`, `assignee_id`, `category_id`). Defaults: `OPEN` / `MEDIUM`.
+  Writes a `TICKET_CREATED` event with the requester as actor.
+- **`PATCH`** enforces the status machine
+  (`OPEN ↔ IN_PROGRESS`, `→ RESOLVED`, `RESOLVED → CLOSED`; `CLOSED` is locked)
+  and writes one event per actual change (`STATUS_CHANGED`,
+  `PRIORITY_CHANGED`, `ASSIGNED`, `CATEGORY_CHANGED`) with `from`/`to` data —
+  all in a single transaction. No `actor_id` is accepted from the payload:
+  events record `NULL` until authentication exists.
+- **Status codes:** `400` malformed JSON / bad types / unknown or read-only
+  fields / invalid enums or pagination, `404` ticket not found, `409` invalid
+  status transition, `422` missing/blank fields or nonexistent/inactive
+  references.
+
+### Seed development data
+
+```bash
+cd backend
+uv run flask --app app seed
+# Seed complete: 6 categories, 3 users created.
+uv run flask --app app seed   # idempotent: creates nothing the second time
+```
+
+Inserts the six categories (Access, Hardware, Software, Network, Billing,
+Other) and three development users the ticket endpoints need. Running it
+twice never duplicates rows.
 
 ## Stack
 
@@ -136,15 +181,19 @@ Design decisions:
 ```
 backend/
   app/
-    api/           # HTTP routes (Blueprints)
+    api/           # HTTP routes (Blueprints): health, tickets, serializers
+    services/      # business rules (ticket_service)
+    repositories/  # SQL only (ticket, user, category)
+    commands.py    # Flask CLI (flask seed)
     config.py      # configuration from environment variables
+    errors.py      # ApiError hierarchy → JSON error envelope
     extensions.py  # db (Flask-SQLAlchemy) and migrate (Flask-Migrate)
     models/        # domain model (User, Category, Ticket, TicketEvent)
-  tests/
+  tests/           # pytest, in-memory SQLite (no Docker required)
   migrations/      # Alembic revisions (Flask-Migrate)
 docker-compose.yml # PostgreSQL 17 service
 ```
 
-Architecture: **Routes → Services → Repositories → PostgreSQL**. Business
-logic will live in `app/services/` and SQL in `app/repositories/` starting
-with the ticket backend.
+Architecture: **Routes → Services → Repositories → PostgreSQL**. Routes stay
+thin (parse input, call the service, serialize), services own validation,
+business rules and the transaction boundary, repositories contain SQL only.
