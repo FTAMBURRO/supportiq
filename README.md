@@ -6,11 +6,13 @@ Built as a portfolio project to demonstrate solid software engineering: clear ar
 
 ## Current status
 
-**Phase 1 — Setup / foundation.** The backend skeleton runs on Flask and connects to PostgreSQL via Docker Compose, with Flask-Migrate (Alembic) ready for schema versions. No domain models, no frontend, no AI yet.
+**Phase 2 — Backend core (in progress).** The domain model exists: users,
+categories, tickets and their audit-trail events, with migrations applied.
+The API still only exposes the health check — CRUD comes next.
 
 - `GET /api/health` → `200 {"status": "ok"}` (lightweight, no database query)
 - PostgreSQL 17 + Flask-SQLAlchemy + Flask-Migrate wired up
-- Migrations infrastructure in place (no domain models yet)
+- Domain model: `User`, `Category`, `Ticket`, `TicketEvent` (migration applied)
 
 ## Stack
 
@@ -105,6 +107,30 @@ Never commit `.env` — it is gitignored.
 | `DATABASE_URL` | PostgreSQL connection string, e.g. `postgresql+psycopg://user:pass@127.0.0.1:15432/db` |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` / `POSTGRES_PORT` | docker-compose settings (development) |
 
+## Domain model
+
+Four entities, designed for integrity, traceability and a future AI
+classification phase:
+
+| Entity | Purpose | Notes |
+|---|---|---|
+| `User` | People who request, receive or act on tickets | No auth yet; deactivated via `is_active` |
+| `Category` | Functional categories (Access, Hardware, ...) | Data, not an enum — administrable and AI-friendly; deactivated via `is_active` |
+| `Ticket` | The central entity | UUID PK + human `ticket_number` (`SUP-000001`); `category_id` is nullable on purpose (AI classification arrives later) |
+| `TicketEvent` | Append-only audit trail | `actor_id` nullable (system/AI events); payload in a `metadata` JSONB column (Python attribute: `data`) |
+
+Design decisions:
+
+- **Enums** (`status`, `priority`, `event_type`) are stored as `VARCHAR + CHECK`
+  — portable, readable, and still validated at the database.
+- **`ticket_number`** comes from a PostgreSQL sequence (`ticket_number_seq`), so
+  concurrent inserts never collide.
+- **All foreign keys use `ON DELETE RESTRICT`** — historical records are
+  preserved; entities are deactivated, not deleted. No cascades.
+- **Timestamps** are timezone-aware (`TIMESTAMPTZ`) and set by the application.
+- **Indexes** target real queries: status+recent listing, requester, assignee,
+  category, and per-ticket event timelines.
+
 ## Repository layout
 
 ```
@@ -113,6 +139,7 @@ backend/
     api/           # HTTP routes (Blueprints)
     config.py      # configuration from environment variables
     extensions.py  # db (Flask-SQLAlchemy) and migrate (Flask-Migrate)
+    models/        # domain model (User, Category, Ticket, TicketEvent)
   tests/
   migrations/      # Alembic revisions (Flask-Migrate)
 docker-compose.yml # PostgreSQL 17 service
