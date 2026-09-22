@@ -1,0 +1,19 @@
+[project]
+name = "supportiq-backend"
+version = "0.1.0"
+description = "SupportIQ backend - AI-assisted support ticket management"
+readme = "../README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "flask>=3.1",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
