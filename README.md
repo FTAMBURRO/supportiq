@@ -6,13 +6,18 @@ Built as a portfolio project to demonstrate solid software engineering: clear ar
 
 ## Current status
 
-**Phase 2 — Milestone 2 complete: Ticket API.** The domain model exists
-(users, categories, tickets and audit-trail events) and the API now exposes
-full ticket management through the Routes → Services → Repositories stack.
+**Phase 2 complete: Backend Core.** The domain model exists (users,
+categories, tickets and audit-trail events) and the API exposes full ticket
+management, each ticket's history and a dashboard summary through the
+Routes → Services → Repositories stack.
 
 - `GET /api/health` → `200 {"status": "ok"}` (lightweight, no database query)
 - Ticket endpoints: create, list (paginated + filters), get, partial update
   with status machine, audit events and a consistent JSON error envelope
+- Ticket history: `GET /api/tickets/<ticket_number>/events` — the full audit
+  trail of a ticket, oldest event first
+- Dashboard summary: `GET /api/dashboard/summary` — status/priority counters
+  and unassigned count, computed with SQL aggregates
 - PostgreSQL 17 + Flask-SQLAlchemy + Flask-Migrate wired up
 - Domain model: `User`, `Category`, `Ticket`, `TicketEvent` (migration applied)
 - Idempotent development seed: `flask seed`
@@ -29,6 +34,8 @@ All endpoints live under `/api`. Errors always return
 | `GET` | `/api/tickets` | List tickets: `page`/`per_page` + filters `status`, `priority`, `category_id`, `assignee_id`, `requester_id` |
 | `GET` | `/api/tickets/<ticket_number>` | Fetch one ticket by its public id (`SUP-000001`) |
 | `PATCH` | `/api/tickets/<ticket_number>` | Partial update: `title`, `description`, `status`, `priority`, `assignee_id`, `category_id` |
+| `GET` | `/api/tickets/<ticket_number>/events` | Full ticket history, oldest event first (no pagination) |
+| `GET` | `/api/dashboard/summary` | Headline counters: tickets by status, by priority, unassigned |
 
 Rules worth knowing:
 
@@ -41,6 +48,19 @@ Rules worth knowing:
   `PRIORITY_CHANGED`, `ASSIGNED`, `CATEGORY_CHANGED`) with `from`/`to` data —
   all in a single transaction. No `actor_id` is accepted from the payload:
   events record `NULL` until authentication exists.
+- **`GET .../events`** returns `{"items": [...]}` where every event exposes
+  `id`, `type`, `actor` (the acting user or `null` before authentication
+  exists), `data` (the stored JSON payload) and `created_at`. Events are
+  ordered `created_at ASC, id ASC` — the `id` tie-break keeps the order
+  deterministic for events created in the same operation. An unknown or
+  malformed ticket number returns `404 TICKET_NOT_FOUND`.
+- **`GET /api/dashboard/summary`** returns
+  `tickets {total, open, in_progress, resolved, closed}`,
+  `priority {urgent, high, medium, low}` and `unassigned`. Every number is a
+  SQL aggregate (`GROUP BY` / `COUNT`), statuses and priorities absent from
+  the table are zero-filled, and `unassigned` counts tickets with no assignee
+  regardless of status. Keys are lowercase; enum values elsewhere stay
+  uppercase.
 - **Status codes:** `400` malformed JSON / bad types / unknown or read-only
   fields / invalid enums or pagination, `404` ticket not found, `409` invalid
   status transition, `422` missing/blank fields or nonexistent/inactive
@@ -181,8 +201,8 @@ Design decisions:
 ```
 backend/
   app/
-    api/           # HTTP routes (Blueprints): health, tickets, serializers
-    services/      # business rules (ticket_service)
+    api/           # HTTP routes (Blueprints): health, tickets, dashboard, serializers
+    services/      # business rules (ticket_service, dashboard_service)
     repositories/  # SQL only (ticket, user, category)
     commands.py    # Flask CLI (flask seed)
     config.py      # configuration from environment variables
