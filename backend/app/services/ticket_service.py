@@ -223,6 +223,15 @@ def get(ticket_number: str) -> Ticket:
     return ticket
 
 
+def get_events(ticket_number: str) -> list[TicketEvent]:
+    """Full audit trail of a ticket, oldest event first.
+
+    No pagination: a normal ticket has a moderate amount of events.
+    """
+    ticket = get(ticket_number)  # reuses the 404 above
+    return _ticket_repo.list_events(ticket.id)
+
+
 def list_tickets(
     *, page: int, per_page: int, filters: dict[str, str | None]
 ) -> tuple[list[Ticket], int]:

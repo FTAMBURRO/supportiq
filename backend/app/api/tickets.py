@@ -7,7 +7,11 @@ All validation and business rules live in ``app.services.ticket_service``.
 from flask import jsonify, request
 
 from app.api import api
-from app.api.serializers import serialize_ticket, serialize_ticket_list
+from app.api.serializers import (
+    serialize_event_list,
+    serialize_ticket,
+    serialize_ticket_list,
+)
 from app.errors import BadRequestError
 from app.services import ticket_service
 
@@ -77,6 +81,16 @@ def list_tickets():
 def get_ticket(ticket_number: str):
     """Return one ticket by its public number (SUP-000001)."""
     return jsonify(serialize_ticket(ticket_service.get(ticket_number))), 200
+
+
+@api.get("/tickets/<ticket_number>/events")
+def get_ticket_events(ticket_number: str):
+    """Return the ticket's full audit trail, oldest event first.
+
+    Not paginated: a normal ticket holds a moderate amount of events.
+    """
+    events = ticket_service.get_events(ticket_number)
+    return jsonify(serialize_event_list(events)), 200
 
 
 @api.patch("/tickets/<ticket_number>")

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.models import Ticket
+from app.models import Ticket, TicketEvent
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -37,6 +37,35 @@ def serialize_ticket(ticket: Ticket) -> dict:
         "resolved_at": _iso(ticket.resolved_at),
         "closed_at": _iso(ticket.closed_at),
     }
+
+
+def serialize_event(event: TicketEvent) -> dict:
+    """Public event representation.
+
+    The public name is ``type`` (the model's ``event_type`` is internal).
+    ``actor`` is null for system-generated or pre-auth events.
+    """
+    actor = event.actor
+    return {
+        "id": str(event.id),
+        "type": event.event_type.value,
+        "actor": (
+            None
+            if actor is None
+            else {
+                "id": str(actor.id),
+                "full_name": actor.full_name,
+                "email": actor.email,
+            }
+        ),
+        "data": event.data,
+        "created_at": _iso(event.created_at),
+    }
+
+
+def serialize_event_list(events) -> dict:
+    """Timeline envelope: all events of one ticket, oldest first."""
+    return {"items": [serialize_event(event) for event in events]}
 
 
 def serialize_ticket_list(
