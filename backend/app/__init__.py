@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from flask import Flask
 
 from app.config import config_by_name
+from app.extensions import db, migrate
 
 
 def create_app(config_name: str | None = None) -> Flask:
@@ -27,6 +28,9 @@ def create_app(config_name: str | None = None) -> Flask:
     config_cls = config_by_name[config_name]
     if hasattr(config_cls, "init_app"):
         config_cls.init_app(app)
+
+    db.init_app(app)
+    migrate.init_app(app, db)
 
     from app.api import api
 

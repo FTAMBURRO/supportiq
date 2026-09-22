@@ -5,4 +5,10 @@ Extensions are instantiated here without an app, then initialized inside
 each future extension (database, migrations, ...) a clear home.
 """
 
-# No extensions yet. PostgreSQL and SQLAlchemy arrive in a later phase.
+from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+
+# Extension instances are created here without an app, then initialized
+# inside ``create_app`` via ``init_app``.
+db = SQLAlchemy()
+migrate = Migrate()
