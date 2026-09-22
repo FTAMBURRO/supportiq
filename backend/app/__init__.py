@@ -3,7 +3,8 @@
 import os
 
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, jsonify
+from werkzeug.exceptions import HTTPException
 
 from app.config import config_by_name
 from app.extensions import db, migrate
@@ -38,5 +39,30 @@ def create_app(config_name: str | None = None) -> Flask:
     from app.api import api
 
     app.register_blueprint(api)
+    _register_error_handlers(app)
+    _register_commands(app)
 
     return app
+
+
+def _register_error_handlers(app: Flask) -> None:
+    """Keep every error response in the approved JSON envelope."""
+
+    @app.errorhandler(HTTPException)
+    def handle_http_exception(error: HTTPException):
+        code = (
+            error.name.upper().replace(" ", "_")
+            if error.code != 404
+            else "NOT_FOUND"
+        )
+        return (
+            jsonify(error={"code": code, "message": error.description}),
+            error.code,
+        )
+
+
+def _register_commands(app: Flask) -> None:
+    """Attach Flask CLI commands (``flask seed``)."""
+    from app import commands
+
+    app.cli.add_command(commands.seed)
