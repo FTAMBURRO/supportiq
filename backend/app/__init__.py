@@ -32,6 +32,9 @@ def create_app(config_name: str | None = None) -> Flask:
     db.init_app(app)
     migrate.init_app(app, db)
 
+    # Register ORM models so Alembic autogenerate and db.create_all see them.
+    from app import models  # noqa: F401
+
     from app.api import api
 
     app.register_blueprint(api)
