@@ -18,6 +18,7 @@ uv.lock.bak
 .pytest_cache/
 .coverage
 htmlcov/
+*.db
 
 # Node (frontend, phase 4)
 node_modules/
