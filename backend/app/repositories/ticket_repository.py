@@ -1,5 +1,7 @@
 """Persistence for tickets and their events."""
 
+from __future__ import annotations  # the method below named ``list`` shadows the builtin
+
 import uuid
 
 from sqlalchemy import func, select
@@ -77,3 +79,46 @@ class TicketRepository:
 
     def add_event(self, event: TicketEvent) -> None:
         db.session.add(event)
+
+    def list_events(self, ticket_id: uuid.UUID) -> list[TicketEvent]:
+        """Return the ticket's timeline, oldest first.
+
+        ``created_at`` ties (events created in the same PATCH share a
+        timestamp) are broken deterministically by ``id``; there is no
+        sequence column and the schema stays untouched.
+        """
+        query = (
+            select(TicketEvent)
+            .where(TicketEvent.ticket_id == ticket_id)
+            .options(selectinload(TicketEvent.actor))  # no N+1 on actor
+            .order_by(TicketEvent.created_at.asc(), TicketEvent.id.asc())
+        )
+        return list(db.session.execute(query).scalars().all())
+
+    # --- dashboard aggregates (SQL, never rows-to-Python) -------------------
+
+    def counts_by_status(self) -> dict:
+        """{status: count} for statuses present in the table."""
+        rows = db.session.execute(
+            select(Ticket.status, func.count()).group_by(Ticket.status)
+        ).all()
+        return {status.value: count for status, count in rows}
+
+    def counts_by_priority(self) -> dict:
+        """{priority: count} for priorities present in the table."""
+        rows = db.session.execute(
+            select(Ticket.priority, func.count()).group_by(Ticket.priority)
+        ).all()
+        return {priority.value: count for priority, count in rows}
+
+    def count_unassigned(self) -> int:
+        """Tickets with no assignee, regardless of status."""
+        query = select(func.count()).select_from(Ticket).where(
+            Ticket.assignee_id.is_(None)
+        )
+        return db.session.execute(query).scalar_one()
+
+    def count_total(self) -> int:
+        """Own COUNT so the total/status-sum invariant is really testable."""
+        query = select(func.count()).select_from(Ticket)
+        return db.session.execute(query).scalar_one()
