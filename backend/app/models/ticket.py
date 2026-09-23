@@ -12,6 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
 from app.models.mixins import TimestampMixin
+from pgvector.sqlalchemy import Vector
 
 if TYPE_CHECKING:
     from app.models.category import Category
@@ -100,6 +101,21 @@ class Ticket(TimestampMixin, db.Model):
     )
     closed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+    # Semantic embedding of "title + description" (never category: that
+    # would leak the label a future classifier must predict).
+    # NULL means "not embedded yet or text changed" — a valid state that
+    # `flask embeddings backfill` repairs; vectors are never stale, because
+    # PATCHing title/description nulls them in the same transaction.
+    # embedding_model records the model that produced the vector so searches
+    # never compare vectors from different embedding spaces.
+    # 768 must match app.embeddings.DIMENSIONS and the c94d2e81fa63 migration.
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(768), nullable=True
+    )
+    embedding_model: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
     )
 
     requester: Mapped["User"] = relationship(
