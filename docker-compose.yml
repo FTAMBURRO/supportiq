@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: postgres:17
+    # Official Postgres image + pgvector extension preinstalled.
+    # Same entrypoint/env/healthcheck as postgres:17 — drop-in replacement.
+    image: pgvector/pgvector:pg17
     container_name: supportiq-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-supportiq}
