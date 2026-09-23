@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.extensions import db
-from app.models import Ticket, TicketEvent
+from app.models import Category, CategorySource, Ticket, TicketEvent
 
 # Eager-load what the serializer touches so listings never fall into N+1.
 _EAGER_LOADS = (
@@ -125,6 +125,26 @@ class TicketRepository:
 
     # --- semantic search / embeddings (pgvector) ----------------------------
 
+    @staticmethod
+    def _similarity_query(embedding: list[float], *, model: str):
+        """Base cosine select shared by search AND classification.
+
+        One implementation of the vector math: same ``<=>`` operator,
+        same ``1 - distance`` similarity, same model guard (vectors from
+        different models live in different spaces and must never be
+        compared), same deterministic ``id`` tie-break. Callers only
+        add their own WHERE clauses, joins and LIMIT.
+        """
+        distance = Ticket.embedding.cosine_distance(embedding)
+        return (
+            select(Ticket, (1 - distance).label("similarity"))
+            .where(
+                Ticket.embedding.isnot(None),
+                Ticket.embedding_model == model,
+            )
+            .order_by(distance.asc(), Ticket.id.asc())
+        )
+
     def find_similar(
         self, embedding: list[float], *, model: str, limit: int = 5
     ) -> list[tuple[Ticket, float]]:
@@ -135,19 +155,45 @@ class TicketRepository:
         the ORDER BY uses the raw ``<=>`` operator so an index can be
         added later without touching this query, and similarity is
         computed only in the SELECT list. Only tickets embedded by the
-        currently configured model are candidates: vectors produced by
-        different models live in different spaces and must never be
-        compared. Ties break on ``id`` for a deterministic ranking.
+        currently configured model are candidates. Ties break on ``id``
+        for a deterministic ranking.
         """
-        distance = Ticket.embedding.cosine_distance(embedding)
+        query = self._similarity_query(embedding, model=model).limit(limit)
+        return [
+            (ticket, float(similarity))
+            for ticket, similarity in db.session.execute(query).all()
+        ]
+
+    def find_classification_neighbors(
+        self,
+        *,
+        exclude_ticket_id: uuid.UUID,
+        embedding: list[float],
+        model: str,
+        k: int,
+    ) -> list[tuple[Ticket, float]]:
+        """Evidence for automatic classification: same cosine core,
+        narrower WHERE.
+
+        A neighbour only counts as evidence when it carries a category a
+        human set (``category_source = MANUAL``) that is still active:
+        AI-assigned tickets are excluded so the classifier never learns
+        from its own past output (feedback-loop guard). Status and
+        assignee deliberately do NOT filter — a closed ticket's
+        category is as valid as an open one. The queried ticket itself
+        is always excluded. Best match first, at most ``k`` rows.
+        """
         query = (
-            select(Ticket, (1 - distance).label("similarity"))
+            self._similarity_query(embedding, model=model)
+            .join(Ticket.category)
             .where(
-                Ticket.embedding.isnot(None),
-                Ticket.embedding_model == model,
+                Ticket.id != exclude_ticket_id,
+                Ticket.category_id.isnot(None),
+                Category.is_active.is_(True),
+                Ticket.category_source == CategorySource.MANUAL,
             )
-            .order_by(distance.asc(), Ticket.id.asc())
-            .limit(limit)
+            .options(selectinload(Ticket.category))  # evidence needs slugs
+            .limit(k)
         )
         return [
             (ticket, float(similarity))
