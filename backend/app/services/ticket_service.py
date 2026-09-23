@@ -28,6 +28,7 @@ from app.models.mixins import utcnow
 from app.repositories.category_repository import CategoryRepository
 from app.repositories.ticket_repository import TicketRepository
 from app.repositories.user_repository import UserRepository
+from app.services import embedding_service
 
 _ticket_repo = TicketRepository()
 _user_repo = UserRepository()
@@ -210,6 +211,12 @@ def create(data: dict[str, Any]) -> Ticket:
     )
 
     _persist(ticket, [event])
+
+    # Embeddings are best-effort and happen after the commit: ticket
+    # creation must never depend on the provider being available. On
+    # failure the ticket stays valid with embedding = NULL (backfill
+    # recovers it later).
+    embedding_service.embed_and_persist(ticket)
     return ticket
 
 
@@ -298,6 +305,17 @@ def update(ticket_number: str, data: dict[str, Any]) -> Ticket:
             else _resolve_category(_parse_uuid(raw, "category_id"), "category_id")
         )
 
+    # Decide embedding invalidation with the values the ticket still has
+    # (pre-mutation): only an actual change of the embedded text counts —
+    # a no-op PATCH of the same title must not invalidate anything.
+    text_changed = (
+        (new_title is not _MISSING and new_title != ticket.title)
+        or (
+            new_description is not _MISSING
+            and new_description != ticket.description
+        )
+    )
+
     # --- apply phase ---
     events: list[TicketEvent] = []
 
@@ -305,6 +323,14 @@ def update(ticket_number: str, data: dict[str, Any]) -> Ticket:
         ticket.title = new_title
     if new_description is not _MISSING:
         ticket.description = new_description
+
+    if text_changed:
+        # The stored vector describes the OLD text. Invalidate it in this
+        # same transaction so a provider outage can never leave a stale
+        # embedding: NULL is the recoverable state (backfill). Status,
+        # priority, assignee and category changes never touch it.
+        ticket.embedding = None
+        ticket.embedding_model = None
 
     if new_status is not None and new_status != ticket.status:
         old_status = ticket.status
@@ -371,4 +397,9 @@ def update(ticket_number: str, data: dict[str, Any]) -> Ticket:
             )
 
     _persist(ticket, events)
+
+    if text_changed:
+        # Re-embed after the commit (same rule as creation: never while a
+        # write transaction is open). Failure leaves embedding = NULL.
+        embedding_service.embed_and_persist(ticket)
     return ticket

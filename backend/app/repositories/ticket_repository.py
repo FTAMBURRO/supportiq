@@ -122,3 +122,56 @@ class TicketRepository:
         """Own COUNT so the total/status-sum invariant is really testable."""
         query = select(func.count()).select_from(Ticket)
         return db.session.execute(query).scalar_one()
+
+    # --- semantic search / embeddings (pgvector) ----------------------------
+
+    def find_similar(
+        self, embedding: list[float], *, model: str, limit: int = 5
+    ) -> list[tuple[Ticket, float]]:
+        """Exact cosine nearest neighbours (pgvector), best match first.
+
+        Deliberately no ANN index (HNSW/IVFFlat): exact search has
+        perfect recall and is fast enough until the table grows large;
+        the ORDER BY uses the raw ``<=>`` operator so an index can be
+        added later without touching this query, and similarity is
+        computed only in the SELECT list. Only tickets embedded by the
+        currently configured model are candidates: vectors produced by
+        different models live in different spaces and must never be
+        compared. Ties break on ``id`` for a deterministic ranking.
+        """
+        distance = Ticket.embedding.cosine_distance(embedding)
+        query = (
+            select(Ticket, (1 - distance).label("similarity"))
+            .where(
+                Ticket.embedding.isnot(None),
+                Ticket.embedding_model == model,
+            )
+            .order_by(distance.asc(), Ticket.id.asc())
+            .limit(limit)
+        )
+        return [
+            (ticket, float(similarity))
+            for ticket, similarity in db.session.execute(query).all()
+        ]
+
+    def list_pending_embeddings(
+        self, *, limit: int | None = None
+    ) -> list[Ticket]:
+        """Tickets with no embedding yet, oldest first (backfill queue)."""
+        query = (
+            select(Ticket)
+            .where(Ticket.embedding.is_(None))
+            .order_by(Ticket.created_at.asc(), Ticket.id.asc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        return list(db.session.execute(query).scalars().all())
+
+    def count_pending_embeddings(self) -> int:
+        """How many tickets still lack an embedding."""
+        query = (
+            select(func.count())
+            .select_from(Ticket)
+            .where(Ticket.embedding.is_(None))
+        )
+        return db.session.execute(query).scalar_one()
