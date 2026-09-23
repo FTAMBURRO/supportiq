@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Validation only — this workflow never deploys anything.
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend tests (SQLite + PostgreSQL/pgvector)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        # Same image family as docker-compose.yml (PostgreSQL 17 + pgvector).
+        image: pgvector/pgvector:pg17
+        env:
+          # Ephemeral, fictional CI-only credentials for this container.
+          POSTGRES_USER: supportiq_ci
+          POSTGRES_PASSWORD: supportiq_ci
+          POSTGRES_DB: supportiq_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U supportiq_ci -d supportiq_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The postgres-marked fixtures create their own isolated database
+      # from this URL and enable the vector extension themselves.
+      # Local service container only: no external database is contacted.
+      TEST_DATABASE_URL: postgresql+psycopg://supportiq_ci:supportiq_ci@127.0.0.1:5432/supportiq_ci_test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies from uv.lock
+        run: uv sync --frozen
+
+      # One run covers both dialects: unmarked tests use in-memory
+      # SQLite, the nine postgres-marked tests use the service above.
+      # TestingConfig pins EMBEDDING_PROVIDER=fake and conftest fails
+      # any outbound HTTP call, so this can never reach Gemini or any
+      # other external service. No secrets, no API keys, USD 0.
+      - name: Run backend tests
+        run: uv run --no-sync pytest -q
+
+  frontend:
+    name: Frontend lint, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies from package-lock.json
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
