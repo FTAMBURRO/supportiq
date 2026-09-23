@@ -1,5 +1,7 @@
 # SupportIQ
 
+[![CI](https://github.com/FTAMBURRO/supportiq/actions/workflows/ci.yml/badge.svg)](https://github.com/FTAMBURRO/supportiq/actions/workflows/ci.yml)
+
 AI-assisted support ticket management system: tickets are received, classified automatically and routed to the right team.
 
 Built as a portfolio project to demonstrate solid software engineering: clear architecture, testing, applied AI, and CI/CD.
