@@ -222,7 +222,7 @@ Never commit `.env` — it is gitignored.
 | `EMBEDDING_MODEL` | Embedding model name, default `gemini-embedding-001` |
 | `EMBEDDING_API_KEY` | Free Gemini key (never commit it). Empty/missing = embeddings disabled, tickets stay valid with `NULL` |
 | `TEST_DATABASE_URL` | Optional: separate database for the `postgres`-marked tests (they skip if unset) |
-| `CLASSIFICATION_ENABLED` | Explicit boolean, `true` or `false` only (anything else fails at startup). Development defaults to `false` and reads this variable; testing ignores it on purpose; base/production default to `true`. Never derived from `EMBEDDING_PROVIDER` |
+| `CLASSIFICATION_ENABLED` | Explicit boolean, `true` or `false` only (anything else fails at startup). Development defaults to `false` and reads this variable; testing ignores it on purpose; production defaults to `true` but also reads it (Fase 6 launches with `false` until Gemini is enabled). Never derived from `EMBEDDING_PROVIDER` |
 
 The classifier's gates (similarity/margin/confidence thresholds) are
 **code configuration** in `backend/app/config.py` — see
@@ -231,7 +231,9 @@ The switch itself, `CLASSIFICATION_ENABLED`, is an explicit boolean
 environment variable: only `true`/`false` are accepted (a typo fails at
 startup), **development defaults to `false` and reads it**, testing
 ignores it on purpose so a stray shell variable can never flip the
-suite, and base/production default to `true`. It is never derived from
+suite, and **production defaults to `true` but also reads it** (Fase 6
+launches production with `CLASSIFICATION_ENABLED=false` until real
+embeddings exist). It is never derived from
 `EMBEDDING_PROVIDER`: enabling the classifier implies nothing about
 which provider embeds, and vice versa.
 
@@ -579,6 +581,70 @@ Gemini is never touched in CI: no API key, no secret, no external
 embedding call (`TestingConfig` pins the fake provider and the conftest
 blocks any outbound HTTP). The workflow uses only public runners and
 containers: **USD 0**.
+
+## Production (Fase 6)
+
+**Target deployment: Render Web Service + Neon PostgreSQL — not yet
+deployed.** The repository is production-ready; the deploy happens in a
+later checkpoint. Hard requirement: **USD 0** (free tiers only — no
+billing, no credit card anywhere).
+
+Architecture (Option B — one service, same origin, no CORS):
+
+```text
+Browser
+  │
+  ▼
+Flask / Gunicorn
+  ├── /*      → React SPA (frontend/dist; generic index.html fallback
+  │              for deep links such as /tickets/SUP-000001)
+  └── /api/*  → JSON API (never falls through to the SPA)
+        │
+        ▼
+PostgreSQL + pgvector (Neon)
+```
+
+### Production build (build time only)
+
+```bash
+bash scripts/build.sh   # npm ci + vite build → frontend/dist, then uv sync --frozen
+```
+
+The app never runs `npm` at runtime; `frontend/dist` stays gitignored.
+
+### Production start (run time)
+
+```bash
+cd backend
+uv run gunicorn -c gunicorn.conf.py "app:create_app()"
+```
+
+`gunicorn.conf.py` binds `0.0.0.0:$PORT` — `PORT` is injected by the
+platform and never hardcoded (one worker, free-tier friendly). Gunicorn
+is POSIX-only: it runs on the Linux target; the Windows dev machine
+keeps using the Flask development server.
+
+### Required environment variables (host)
+
+| Variable | Value |
+|---|---|
+| `FLASK_ENV` | `production` |
+| `SECRET_KEY` | `python -c "import secrets; print(secrets.token_urlsafe(32))"` — generated on the host, never committed |
+| `DATABASE_URL` | Neon URL, e.g. `postgresql+psycopg://…?sslmode=require` (plain psycopg DSN — accepted as-is) |
+| `CLASSIFICATION_ENABLED` | `false` at first: keep Gemini off until real embeddings are configured |
+| `PORT` | injected by Render |
+
+### Migrations and demo data (manual, never on startup)
+
+```bash
+cd backend
+FLASK_ENV=production SECRET_KEY=… DATABASE_URL=… uv run flask --app app db upgrade
+uv run flask --app app seed                      # idempotent, fictional
+uv run flask --app app classification evaluate   # fictional 36-ticket dataset
+```
+
+Gemini stays off in production for now: no API key exists in the repo
+or the platform, and `CLASSIFICATION_ENABLED=false` guarantees it.
 
 ## Domain model
 
