@@ -6,18 +6,19 @@ Built as a portfolio project to demonstrate solid software engineering: clear ar
 
 ## Current status
 
-**Phase 2 complete · Phase 3 · Milestones 1–2 complete: Semantic
-Foundation + Automatic Classification.**
+**Phase 4 complete: React frontend · Phase 3 · Milestones 1–2 complete.**
 The domain model exists (users,
 categories, tickets and audit-trail events) and the API exposes full ticket
 management, each ticket's history and a dashboard summary through the
-Routes → Services → Repositories stack. Phase 3 adds the intelligence
+Routes → Services → Repositories stack. Phase 3 added the intelligence
 layer in milestones: M1 stored per-ticket embeddings with pgvector
 behind a free-tier Gemini provider; M2 classifies new tickets with a
 **similarity-weighted vote over historically human-categorized
 tickets**, abstaining when the evidence is insufficient. No LLM is ever
-asked for the category, there is still **no search/classification HTTP
-endpoint and no frontend**.
+asked for the category, and there is still **no search/classification
+HTTP endpoint**. Phase 4 adds a four-page React UI (Dashboard, Tickets,
+Create, Detail) with filters, pagination, inline editing and the event
+history — see [Frontend (Phase 4)](#frontend-phase-4).
 
 - `GET /api/health` → `200 {"status": "ok"}` (lightweight, no database query)
 - Ticket endpoints: create, list (paginated + filters), get, partial update
@@ -26,6 +27,9 @@ endpoint and no frontend**.
   trail of a ticket, oldest event first
 - Dashboard summary: `GET /api/dashboard/summary` — status/priority counters
   and unassigned count, computed with SQL aggregates
+- Reference data: `GET /api/users` and `GET /api/categories` — active
+  records only, plain JSON arrays, name order (the UI's selects and id-to-name
+  joins)
 - Semantic embeddings: `ticket.embedding vector(768)` + `embedding_model`
   via pgvector (one migration), never blocking ticket writes
 - Automatic classification on `POST /api/tickets` (after the embedding
@@ -59,6 +63,8 @@ All endpoints live under `/api`. Errors always return
 | `PATCH` | `/api/tickets/<ticket_number>` | Partial update: `title`, `description`, `status`, `priority`, `assignee_id`, `category_id` |
 | `GET` | `/api/tickets/<ticket_number>/events` | Full ticket history, oldest event first (no pagination) |
 | `GET` | `/api/dashboard/summary` | Headline counters: tickets by status, by priority, unassigned |
+| `GET` | `/api/users` | Active users, plain array `[{id, full_name, email}]`, name order |
+| `GET` | `/api/categories` | Active categories, plain array `[{id, name, slug}]`, name order |
 
 Rules worth knowing:
 
@@ -115,14 +121,16 @@ twice never duplicates rows.
 - **Backend:** Python 3.12, Flask (Application Factory + Blueprints), Flask-SQLAlchemy, Flask-Migrate
 - **Database:** PostgreSQL 17 + pgvector (Docker Compose)
 - **Embeddings:** Gemini `gemini-embedding-001` free tier (plain httpx, no SDK), plus an in-process fake provider for tests
-- **Tooling:** [uv](https://docs.astral.sh/uv/) for dependency management, pytest
-- **Planned:** React + TypeScript, GitHub Actions, deployment
+- **Frontend:** React 19 + TypeScript + Vite, React Router, CSS Modules, lucide-react
+- **Tooling:** [uv](https://docs.astral.sh/uv/) for dependency management, pytest; npm + ESLint + Vitest for the frontend
+- **Planned:** GitHub Actions, deployment
 
 ## Requirements
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes Docker Compose)
 - [uv](https://docs.astral.sh/uv/)
 - Python 3.12 (uv can install it automatically)
+- Node.js 20+ and npm (frontend)
 
 ## Setup
 
@@ -214,14 +222,18 @@ Never commit `.env` — it is gitignored.
 | `EMBEDDING_MODEL` | Embedding model name, default `gemini-embedding-001` |
 | `EMBEDDING_API_KEY` | Free Gemini key (never commit it). Empty/missing = embeddings disabled, tickets stay valid with `NULL` |
 | `TEST_DATABASE_URL` | Optional: separate database for the `postgres`-marked tests (they skip if unset) |
+| `CLASSIFICATION_ENABLED` | Explicit boolean, `true` or `false` only (anything else fails at startup). Development defaults to `false` and reads this variable; testing ignores it on purpose; base/production default to `true`. Never derived from `EMBEDDING_PROVIDER` |
 
-The classifier's switch and gates are **code configuration per
-environment** (deliberately not environment variables, and never
-inferred from `EMBEDDING_PROVIDER`): `CLASSIFICATION_ENABLED` is `True`
-in the base/production config and explicitly `False` in development and
-testing while those environments run fake embeddings; the three gate
-thresholds live beside it in `backend/app/config.py` — see
+The classifier's gates (similarity/margin/confidence thresholds) are
+**code configuration** in `backend/app/config.py` — see
 [Automatic classification](#automatic-classification-phase-3--milestone-2).
+The switch itself, `CLASSIFICATION_ENABLED`, is an explicit boolean
+environment variable: only `true`/`false` are accepted (a typo fails at
+startup), **development defaults to `false` and reads it**, testing
+ignores it on purpose so a stray shell variable can never flip the
+suite, and base/production default to `true`. It is never derived from
+`EMBEDDING_PROVIDER`: enabling the classifier implies nothing about
+which provider embeds, and vice versa.
 
 ## Semantic embeddings (Phase 3 · Milestone 1)
 
@@ -483,6 +495,69 @@ end-to-end POST classified over real cosine distance, the authentic
 "AI twin is not evidence" scenario, and a read-only smoke of the
 evaluation CLI. No test ever calls Gemini.
 
+## Frontend (Phase 4)
+
+React + TypeScript SPA that talks to the existing API through Vite's dev
+proxy.
+
+- **Stack:** React 19, TypeScript, Vite 8, React Router 7, CSS Modules
+  (+ `tokens.css` design variables), lucide-react icons, ESLint, Vitest.
+  No UI framework, no state library, no HTTP client beyond native `fetch`.
+- **Pages / routes:**
+  - `/` Dashboard — headline counters + priority/status CSS bars
+    (`GET /api/dashboard/summary`)
+  - `/tickets` — table with `status`/`priority`/`category_id` filters and
+    the page number kept in the URL; real backend pagination (20 per page)
+  - `/tickets/new` — create form (no category field: the classifier gets
+    the first word; priority defaults to MEDIUM)
+  - `/tickets/:ticket_number` — detail with the classification block,
+    inline editing of status/priority/category/assignee (`PATCH`, the
+    backend stays the authority) and the full event history
+
+### Start backend + frontend
+
+```bash
+# terminal 1 — backend (from repo root)
+docker compose up -d --wait
+cd backend && uv run flask --app app run --port 5001
+
+# terminal 2 — frontend
+cd frontend
+npm install
+npm run dev            # http://localhost:5173
+```
+
+The Vite dev server proxies `/api` to `http://127.0.0.1:5001`
+(override with `VITE_PROXY_TARGET`), so development needs **no CORS** —
+and none is configured. The `--port 5001` above matches that proxy
+default; running the backend on another port just needs the matching
+`VITE_PROXY_TARGET`.
+
+### Frontend commands
+
+```bash
+cd frontend
+npm run build    # tsc -b + vite build (type check + bundle)
+npm run lint     # eslint
+npm run test     # vitest (pure logic: formatters, transition matrix)
+```
+
+### Fake vs. semantic demo (honesty rules)
+
+- Normal development/demo: `EMBEDDING_PROVIDER=fake` and
+  `CLASSIFICATION_ENABLED` unset → tickets stay **Uncategorized** and the
+  UI shows the real abstention copy. Nothing about the classification is
+  faked client-side.
+- A **real** semantic demo needs the free-tier Gemini provider on fresh
+  vectors: `EMBEDDING_PROVIDER=gemini` + `CLASSIFICATION_ENABLED=true` +
+  `flask embeddings backfill` (only embeds rows where `embedding IS NULL`,
+  so a database previously embedded by `fake` must be reset first).
+  The UI renders whatever the API returns — no classification results,
+  confidences or AI events are hardcoded.
+- The UI never shows "probability": a classified ticket renders
+  `Confidence score: XX%` (the heuristic — see
+  [Automatic classification](#automatic-classification-phase-3--milestone-2)).
+
 ## Domain model
 
 Four entities, designed for integrity, traceability and a future AI
@@ -524,6 +599,7 @@ backend/
     models/        # domain model (User, Category, Ticket, TicketEvent)
   tests/           # pytest, in-memory SQLite (+ optional postgres-marked tests)
   migrations/      # Alembic revisions (Flask-Migrate)
+frontend/          # React + TypeScript UI (Vite dev server, /api dev proxy)
 docker-compose.yml # PostgreSQL 17 + pgvector service
 ```
 
