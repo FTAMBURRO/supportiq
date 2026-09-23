@@ -10,6 +10,29 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def env_flag(name: str, default: bool) -> bool:
+    """Parse an explicit boolean environment flag.
+
+    Only ``true`` and ``false`` (case-insensitive) are accepted: a typo
+    must fail loudly at startup instead of silently flipping a feature.
+    Deliberately independent of every other variable — notably
+    ``EMBEDDING_PROVIDER`` — so "the classifier runs" and "which
+    provider embeds" stay separate, explicitly configured concerns.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    raise ValueError(
+        f"{name} must be 'true' or 'false' (got {raw!r}); "
+        "leave it unset to use the default"
+    )
+
+
 class Config:
     """Base configuration shared by all environments."""
 
@@ -50,8 +73,11 @@ class DevelopmentConfig(Config):
     DEBUG = True
     # The dev database currently holds FakeEmbeddingProvider vectors,
     # which carry no semantic meaning: classification stays off until
-    # dev embeddings are real. An explicit switch, not a provider sniff.
-    CLASSIFICATION_ENABLED = False
+    # dev embeddings are real. An explicit switch, not a provider sniff:
+    # CLASSIFICATION_ENABLED=true in the environment turns it on (for
+    # real-provider demos) without implying anything about which
+    # provider is configured; unset means false.
+    CLASSIFICATION_ENABLED = env_flag("CLASSIFICATION_ENABLED", False)
 
 
 class TestingConfig(Config):
@@ -71,7 +97,9 @@ class TestingConfig(Config):
     EMBEDDING_PROVIDER = "fake"
 
     # Hash vectors must never drive decisions. Classification tests
-    # enable this explicitly and inject controlled neighbours.
+    # enable this explicitly and inject controlled neighbours. The env
+    # var is deliberately ignored here: a stray CLASSIFICATION_ENABLED
+    # in the shell must never flip the suite's default.
     CLASSIFICATION_ENABLED = False
 
 

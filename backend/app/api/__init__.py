@@ -23,3 +23,5 @@ def handle_api_error(error: ApiError):
 from app.api import health  # noqa: E402, F401  (registers /api/health)
 from app.api import tickets  # noqa: E402, F401  (registers /api/tickets)
 from app.api import dashboard  # noqa: E402, F401  (registers /api/dashboard)
+from app.api import users  # noqa: E402, F401  (registers /api/users)
+from app.api import categories  # noqa: E402, F401  (registers /api/categories)

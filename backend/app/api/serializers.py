@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.models import Ticket, TicketEvent
+from app.models import Category, Ticket, TicketEvent, User
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -57,6 +57,24 @@ def serialize_ticket(ticket: Ticket) -> dict:
         "updated_at": _iso(ticket.updated_at),
         "resolved_at": _iso(ticket.resolved_at),
         "closed_at": _iso(ticket.closed_at),
+    }
+
+
+def serialize_user(user: User) -> dict:
+    """Reference representation of a user for UI selects and joins."""
+    return {
+        "id": str(user.id),
+        "full_name": user.full_name,
+        "email": user.email,
+    }
+
+
+def serialize_category(category: Category) -> dict:
+    """Reference representation of a category for UI selects."""
+    return {
+        "id": str(category.id),
+        "name": category.name,
+        "slug": category.slug,
     }
 
 
