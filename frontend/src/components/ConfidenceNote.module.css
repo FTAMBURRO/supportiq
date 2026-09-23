@@ -1,0 +1,23 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  background: var(--violet-bg);
+  border: 1px solid rgb(105 65 198 / 22%);
+  border-radius: var(--radius-sm);
+}
+
+.score {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--violet-fg);
+}
+
+.explain {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}

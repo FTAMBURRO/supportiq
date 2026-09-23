@@ -1,0 +1,51 @@
+.wrapper {
+  max-width: 720px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.hint {
+  margin: 6px 0 20px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.fieldError {
+  margin-top: 5px;
+  font-size: 12.5px;
+  color: var(--red-fg);
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.actions a.btn {
+  text-decoration: none;
+}
