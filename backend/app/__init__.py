@@ -62,7 +62,8 @@ def _register_error_handlers(app: Flask) -> None:
 
 
 def _register_commands(app: Flask) -> None:
-    """Attach Flask CLI commands (``flask seed``)."""
+    """Attach Flask CLI commands (``flask seed``, ``flask embeddings``)."""
     from app import commands
 
     app.cli.add_command(commands.seed)
+    app.cli.add_command(commands.embeddings)
