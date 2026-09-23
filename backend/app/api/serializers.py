@@ -16,11 +16,29 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
+def _category_ref(ticket: Ticket) -> dict | None:
+    """Nested category for display (``null`` when uncategorized).
+
+    Lists eager-load the relationship, so this never causes N+1.
+    """
+    category = ticket.category
+    if category is None:
+        return None
+    return {"id": str(category.id), "name": category.name, "slug": category.slug}
+
+
 def serialize_ticket(ticket: Ticket) -> dict:
     """Public ticket representation.
 
     ``ticket_number`` is the public id; ``id`` (internal UUID) and the
     lifecycle timestamps are exposed. Events are not included yet.
+
+    Classification fields: ``category_source`` tells whether the current
+    category came from a human (MANUAL) or the classifier (AI), and
+    ``classification_confidence`` holds the last AI score — a heuristic
+    in (0..1], NOT a calibrated probability — or null when a human set
+    the category. The future UI can render "Network · AI · 77%" from
+    these three fields without parsing the event timeline.
     """
     return {
         "id": str(ticket.id),
@@ -32,6 +50,9 @@ def serialize_ticket(ticket: Ticket) -> dict:
         "requester_id": str(ticket.requester_id),
         "assignee_id": str(ticket.assignee_id) if ticket.assignee_id else None,
         "category_id": str(ticket.category_id) if ticket.category_id else None,
+        "category": _category_ref(ticket),
+        "category_source": ticket.category_source.value,
+        "classification_confidence": ticket.classification_confidence,
         "created_at": _iso(ticket.created_at),
         "updated_at": _iso(ticket.updated_at),
         "resolved_at": _iso(ticket.resolved_at),

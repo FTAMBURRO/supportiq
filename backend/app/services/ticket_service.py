@@ -17,6 +17,7 @@ from app.errors import (
 from app.extensions import db
 from app.models import (
     Category,
+    CategorySource,
     Ticket,
     TicketEvent,
     TicketEventType,
@@ -28,7 +29,7 @@ from app.models.mixins import utcnow
 from app.repositories.category_repository import CategoryRepository
 from app.repositories.ticket_repository import TicketRepository
 from app.repositories.user_repository import UserRepository
-from app.services import embedding_service
+from app.services import classification_service, embedding_service
 
 _ticket_repo = TicketRepository()
 _user_repo = UserRepository()
@@ -217,6 +218,12 @@ def create(data: dict[str, Any]) -> Ticket:
     # failure the ticket stays valid with embedding = NULL (backfill
     # recovers it later).
     embedding_service.embed_and_persist(ticket)
+
+    # Classification runs second and reuses the embedding just stored
+    # (zero extra provider calls). It only acts when no category was
+    # provided, abstains unless the historical evidence supports a
+    # decision, and never raises: creation has already succeeded here.
+    classification_service.classify_and_persist(ticket)
     return ticket
 
 
@@ -384,6 +391,13 @@ def update(ticket_number: str, data: dict[str, Any]) -> Ticket:
         if new_category_id != ticket.category_id:
             old_category_id = ticket.category_id
             ticket.category = new_category
+            # A human setting (or clearing) the category makes the
+            # ticket MANUAL evidence again and invalidates any AI
+            # confidence: CATEGORY_CHANGED below is the correction audit
+            # record, and this is the feedback-loop boundary — only
+            # human-assigned categories feed the next classification.
+            ticket.category_source = CategorySource.MANUAL
+            ticket.classification_confidence = None
             events.append(
                 TicketEvent(
                     ticket=ticket,
