@@ -29,11 +29,29 @@ class Config:
     )
     EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY")
 
+    # Classification (Fase 3). Deliberately explicit per environment and
+    # NEVER inferred from EMBEDDING_PROVIDER: whether the classifier runs
+    # and which provider embeds are separate concerns.
+    CLASSIFICATION_ENABLED = True
+    # Similarity-weighted vote parameters. These are initial
+    # HYPOTHESES, validated with `flask classification evaluate` over
+    # the fictional dataset; there is deliberately no target accuracy
+    # or abstention rate to tune toward — results are published as
+    # measured.
+    CLASSIFICATION_K = 5
+    CLASSIFICATION_MIN_SIMILARITY = 0.55
+    CLASSIFICATION_MIN_MARGIN = 0.20
+    CLASSIFICATION_MIN_CONFIDENCE = 0.50
+
 
 class DevelopmentConfig(Config):
     """Configuration for local development."""
 
     DEBUG = True
+    # The dev database currently holds FakeEmbeddingProvider vectors,
+    # which carry no semantic meaning: classification stays off until
+    # dev embeddings are real. An explicit switch, not a provider sniff.
+    CLASSIFICATION_ENABLED = False
 
 
 class TestingConfig(Config):
@@ -51,6 +69,10 @@ class TestingConfig(Config):
     # generated in-process by FakeEmbeddingProvider. tests/conftest.py adds
     # a second, explicit layer: any outbound HTTP call fails the test.
     EMBEDDING_PROVIDER = "fake"
+
+    # Hash vectors must never drive decisions. Classification tests
+    # enable this explicitly and inject controlled neighbours.
+    CLASSIFICATION_ENABLED = False
 
 
 class ProductionConfig(Config):
