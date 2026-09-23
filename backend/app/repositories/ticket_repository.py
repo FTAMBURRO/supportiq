@@ -77,6 +77,23 @@ class TicketRepository:
     def add(self, ticket: Ticket) -> None:
         db.session.add(ticket)
 
+    def list_by_titles(self, titles: list[str]) -> list[Ticket]:
+        """Tickets whose title exactly matches one of ``titles``.
+
+        Used by the evaluation flow to locate the fixed demo dataset
+        without needing a schema marker column; ids come back in title
+        order for reproducibility.
+        """
+        if not titles:
+            return []
+        query = (
+            select(Ticket)
+            .where(Ticket.title.in_(titles))
+            .options(*_EAGER_LOADS)
+            .order_by(Ticket.title.asc())
+        )
+        return list(db.session.execute(query).scalars().all())
+
     def add_event(self, event: TicketEvent) -> None:
         db.session.add(event)
 

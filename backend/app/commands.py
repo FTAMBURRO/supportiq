@@ -157,3 +157,92 @@ def embeddings_similar(title, description, limit):
             f"  {similarity:.4f}  {ticket.ticket_number}  "
             f"[{ticket.status.value}]  {ticket.title}"
         )
+
+
+# --- classification (Fase 3: automatic classification) ----------------------
+
+
+@click.group("classification")
+def classification():
+    """Classifier evaluation over the fictional demo dataset."""
+
+
+@classification.command("evaluate")
+@click.option(
+    "--k",
+    type=click.IntRange(min=1, max=20),
+    default=None,
+    help="Neighbours that vote (default: CLASSIFICATION_K).",
+)
+@click.option(
+    "--min-similarity",
+    type=click.FloatRange(min=0.0, max=1.0),
+    default=None,
+    help="Relevance gate (default: CLASSIFICATION_MIN_SIMILARITY).",
+)
+@click.option(
+    "--min-margin",
+    type=click.FloatRange(min=0.0, max=1.0),
+    default=None,
+    help="Decisiveness gate (default: CLASSIFICATION_MIN_MARGIN).",
+)
+@click.option(
+    "--min-confidence",
+    type=click.FloatRange(min=0.0, max=1.0),
+    default=None,
+    help="Overall gate (default: CLASSIFICATION_MIN_CONFIDENCE).",
+)
+@with_appcontext
+def classification_evaluate(k, min_similarity, min_margin, min_confidence):
+    """Leave-one-out evaluation on the 36 fictional demo tickets.
+
+    Seeds the demo dataset if needed, then classifies each demo ticket
+    from the other 35 (self excluded, production evidence rules) and
+    compares against the known category. Reports coverage, abstention
+    rate, accuracy among classified, overall accuracy, forced accuracy
+    (gates disabled), confidence for correct vs wrong calls and a
+    confusion matrix.
+
+    There is deliberately no target to hit: K and the thresholds are
+    hypotheses that default to configuration and accept overrides so
+    different reasonable settings can be compared, and the numbers are
+    published exactly as measured. With FakeEmbeddingProvider the report
+    states loudly that it validates mechanics only, never semantic
+    quality. Costs USD 0.
+    """
+    from app.errors import ApiError
+    from app.services import evaluation_service
+
+    config = current_app.config
+    try:
+        created, present = evaluation_service.ensure_dataset()
+    except ApiError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(
+        f"dataset: {present} demo tickets present ({created} created this run)."
+    )
+
+    try:
+        report = evaluation_service.evaluate(
+            k=k if k is not None else config["CLASSIFICATION_K"],
+            min_similarity=(
+                min_similarity
+                if min_similarity is not None
+                else config["CLASSIFICATION_MIN_SIMILARITY"]
+            ),
+            min_margin=(
+                min_margin
+                if min_margin is not None
+                else config["CLASSIFICATION_MIN_MARGIN"]
+            ),
+            min_confidence=(
+                min_confidence
+                if min_confidence is not None
+                else config["CLASSIFICATION_MIN_CONFIDENCE"]
+            ),
+        )
+    except ApiError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    for line in evaluation_service.format_report(report):
+        click.echo(line)
