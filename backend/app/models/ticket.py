@@ -6,7 +6,18 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, Uuid, event, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    Uuid,
+    event,
+    text,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +49,19 @@ class TicketPriority(StrEnum):
     URGENT = "URGENT"
 
 
+class CategorySource(StrEnum):
+    """Provenance of the ticket's current category.
+
+    MANUAL is the default and the only source the AI classifier may
+    learn from: an AI-assigned category never becomes evidence for the
+    next classification, which is what keeps the classifier from
+    reinforcing its own mistakes (feedback-loop guard).
+    """
+
+    MANUAL = "MANUAL"
+    AI = "AI"
+
+
 def _stored_enum(enum_cls: type[StrEnum], name: str) -> SAEnum:
     """Enum stored as VARCHAR + CHECK (portable, readable, PG-compatible)."""
     return SAEnum(
@@ -64,6 +88,10 @@ class Ticket(TimestampMixin, db.Model):
     __tablename__ = "tickets"
     __table_args__ = (
         Index("ix_tickets_status_created_at", "status", "created_at"),
+        CheckConstraint(
+            "classification_confidence >= 0 AND classification_confidence <= 1",
+            name="ticket_classification_confidence",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -94,6 +122,21 @@ class Ticket(TimestampMixin, db.Model):
     )
     category_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(), ForeignKey("categories.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    # Who assigned the CURRENT category (see CategorySource). MANUAL is
+    # also the feedback-loop guard: only manual categories are eligible
+    # evidence for automatic classification.
+    category_source: Mapped[CategorySource] = mapped_column(
+        _stored_enum(CategorySource, "ticket_category_source"),
+        default=CategorySource.MANUAL,
+        server_default="MANUAL",
+        nullable=False,
+    )
+    # Heuristic score in (0..1] of the last AI classification — NOT a
+    # calibrated probability (see classification_service). NULL whenever
+    # a human set the category; the AI_CLASSIFIED event keeps history.
+    classification_confidence: Mapped[float | None] = mapped_column(
+        Float, nullable=True
     )
 
     resolved_at: Mapped[datetime | None] = mapped_column(

@@ -6,12 +6,18 @@ see them.
 """
 
 from app.models.category import Category
-from app.models.ticket import Ticket, TicketPriority, TicketStatus
+from app.models.ticket import (
+    CategorySource,
+    Ticket,
+    TicketPriority,
+    TicketStatus,
+)
 from app.models.ticket_event import TicketEvent, TicketEventType
 from app.models.user import User
 
 __all__ = [
     "Category",
+    "CategorySource",
     "Ticket",
     "TicketEvent",
     "TicketEventType",
