@@ -13,7 +13,7 @@
 
 .track {
   height: 8px;
-  background: var(--gray-bg);
+  background: var(--track);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -22,7 +22,29 @@
   height: 100%;
   background: var(--accent);
   border-radius: 999px;
-  transition: width 0.2s ease;
+  transition: width 0.25s ease;
+}
+
+/* Semantic tones: the label always sits next to the bar, so color adds
+ * scannability without ever being the only signal. */
+.blue {
+  background: var(--blue-fg);
+}
+
+.amber {
+  background: var(--amber-fg);
+}
+
+.green {
+  background: var(--green-fg);
+}
+
+.red {
+  background: var(--red-fg);
+}
+
+.gray {
+  background: var(--gray-fg);
 }
 
 .value {

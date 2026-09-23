@@ -8,7 +8,7 @@ import styles from './pages/NotFound.module.css'
 
 function NotFoundPage() {
   return (
-    <div>
+    <div className={styles.wrap}>
       <h1>Page not found</h1>
       <p className={styles.hint}>
         The page you are looking for does not exist.{' '}

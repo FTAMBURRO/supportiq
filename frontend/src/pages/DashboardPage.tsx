@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getDashboardSummary } from '../api/dashboard'
 import { errorMessage } from '../api/client'
-import ProgressBar from '../components/ProgressBar'
+import ProgressBar, { type BarTone } from '../components/ProgressBar'
 import StatCard from '../components/StatCard'
 import { ErrorBanner, LoadingState } from '../components/States'
 import type { DashboardSummary, TicketPriority } from '../types'
@@ -12,14 +12,24 @@ import styles from './DashboardPage.module.css'
 const PRIORITY_ORDER: ReadonlyArray<{
   key: keyof DashboardSummary['priority']
   label: TicketPriority
+  tone: BarTone
 }> = [
-  { key: 'urgent', label: 'URGENT' },
-  { key: 'high', label: 'HIGH' },
-  { key: 'medium', label: 'MEDIUM' },
-  { key: 'low', label: 'LOW' },
+  { key: 'urgent', label: 'URGENT', tone: 'red' },
+  { key: 'high', label: 'HIGH', tone: 'amber' },
+  { key: 'medium', label: 'MEDIUM', tone: 'blue' },
+  { key: 'low', label: 'LOW', tone: 'gray' },
 ]
 
-const STATUS_ORDER = ['open', 'in_progress', 'resolved', 'closed'] as const
+const STATUS_ORDER: ReadonlyArray<{
+  key: keyof DashboardSummary['tickets']
+  label: string
+  tone: BarTone
+}> = [
+  { key: 'open', label: statusLabel('OPEN'), tone: 'blue' },
+  { key: 'in_progress', label: statusLabel('IN_PROGRESS'), tone: 'amber' },
+  { key: 'resolved', label: statusLabel('RESOLVED'), tone: 'green' },
+  { key: 'closed', label: statusLabel('CLOSED'), tone: 'gray' },
+]
 
 /** Dashboard: headline counters + two CSS bar overviews, straight from
  * GET /api/dashboard/summary. No chart library. */
@@ -53,13 +63,7 @@ export default function DashboardPage() {
   const priorityMax = Math.max(
     ...PRIORITY_ORDER.map(({ key }) => summary.priority[key]),
   )
-  const statusMax = Math.max(...STATUS_ORDER.map((s) => summary.tickets[s]))
-  const statusLabels: Record<(typeof STATUS_ORDER)[number], string> = {
-    open: statusLabel('OPEN'),
-    in_progress: statusLabel('IN_PROGRESS'),
-    resolved: statusLabel('RESOLVED'),
-    closed: statusLabel('CLOSED'),
-  }
+  const statusMax = Math.max(...STATUS_ORDER.map((s) => summary.tickets[s.key]))
 
   return (
     <div>
@@ -81,12 +85,13 @@ export default function DashboardPage() {
         <section className={styles.panel} aria-label="Tickets by priority">
           <h2>Tickets by Priority</h2>
           <div className={styles.bars}>
-            {PRIORITY_ORDER.map(({ key, label }) => (
+            {PRIORITY_ORDER.map(({ key, label, tone }) => (
               <ProgressBar
                 key={key}
                 label={priorityLabel(label)}
                 value={summary.priority[key]}
                 max={priorityMax}
+                tone={tone}
               />
             ))}
           </div>
@@ -97,10 +102,11 @@ export default function DashboardPage() {
           <div className={styles.bars}>
             {STATUS_ORDER.map((status) => (
               <ProgressBar
-                key={status}
-                label={statusLabels[status]}
-                value={summary.tickets[status]}
+                key={status.key}
+                label={status.label}
+                value={summary.tickets[status.key]}
                 max={statusMax}
+                tone={status.tone}
               />
             ))}
           </div>

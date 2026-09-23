@@ -1,4 +1,4 @@
-import { AlertCircle, Loader2 } from 'lucide-react'
+import { AlertCircle, Inbox, Loader2 } from 'lucide-react'
 import styles from './States.module.css'
 
 /** The three states every async screen needs: loading, API error, empty. */
@@ -43,6 +43,9 @@ export function EmptyState({
 }) {
   return (
     <div className={styles.empty}>
+      <span className={styles.emptyIcon}>
+        <Inbox size={20} aria-hidden="true" />
+      </span>
       <p className={styles.emptyTitle}>{title}</p>
       {hint && <p className={styles.emptyHint}>{hint}</p>}
       {action}

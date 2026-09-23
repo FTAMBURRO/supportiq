@@ -7,6 +7,7 @@
 }
 
 .spinner {
+  color: var(--accent);
   animation: spin 0.9s linear infinite;
 }
 
@@ -38,11 +39,29 @@
   background: var(--surface);
   border: 1px solid rgb(180 35 24 / 35%);
   border-radius: var(--radius-sm);
+  transition: background-color var(--dur) ease;
+}
+
+.retry:hover {
+  background: rgb(180 35 24 / 7%);
 }
 
 .empty {
-  padding: 48px 16px;
+  padding: 44px 16px;
   text-align: center;
+}
+
+.emptyIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+  background: var(--gray-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
 }
 
 .emptyTitle {

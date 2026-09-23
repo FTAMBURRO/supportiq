@@ -11,14 +11,22 @@
 }
 
 .clear {
+  display: inline-flex;
+  align-items: center;
+  min-height: 39px; /* same height as the selects beside it */
   padding: 8px 12px;
   font-size: 13px;
   font-weight: 550;
-  color: var(--accent);
-  background: none;
-  border: none;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  transition:
+    background-color var(--dur) ease,
+    color var(--dur) ease;
 }
 
 .clear:hover {
-  text-decoration: underline;
+  color: var(--text);
+  background: var(--gray-bg);
 }

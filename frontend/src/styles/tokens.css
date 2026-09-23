@@ -4,6 +4,7 @@
   --surface: #ffffff;
   --border: #e4e7ec;
   --border-strong: #d0d5dd;
+  --track: #eaecf0; /* progress-bar track: clearly visible on white */
 
   /* Text */
   --text: #1d2939;
@@ -39,6 +40,9 @@
   --radius-sm: 6px;
   --radius: 10px;
   --shadow-sm: 0 1px 2px rgb(16 24 40 / 6%);
+
+  /* Motion (kept short; disabled entirely under prefers-reduced-motion) */
+  --dur: 150ms;
 
   /* Type */
   --font:

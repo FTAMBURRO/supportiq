@@ -23,9 +23,38 @@
 }
 
 .body {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding-left: 24px;
+}
+
+/* Connecting rail + dot: a real timeline instead of a plain list. */
+.body::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 15px;
+  bottom: -22px; /* runs through the padding into the next event */
+  width: 1px;
+  background: var(--border);
+}
+
+.body::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 9px;
+  height: 9px;
+  background: var(--surface);
+  border: 2px solid var(--border-strong);
+  border-radius: 999px;
+}
+
+.item:last-child .body::before {
+  display: none;
 }
 
 .text {

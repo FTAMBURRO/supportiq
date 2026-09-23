@@ -37,10 +37,16 @@
 
 .row {
   cursor: pointer;
+  transition: background-color 120ms ease;
 }
 
 .row:hover {
   background: var(--accent-soft);
+}
+
+/* The whole row is clickable; tint the title to say so. */
+.row:hover .title {
+  color: var(--accent);
 }
 
 .number {
@@ -56,6 +62,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: color 120ms ease;
 }
 
 .requester {

@@ -1,4 +1,8 @@
+.wrap {
+  max-width: 560px;
+}
+
 .hint {
-  margin-top: 8px;
+  margin-top: 10px;
   color: var(--text-muted);
 }

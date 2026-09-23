@@ -17,6 +17,9 @@
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
+  transition:
+    background-color var(--dur) ease,
+    color var(--dur) ease;
 }
 
 .btn:hover:not(:disabled) {
