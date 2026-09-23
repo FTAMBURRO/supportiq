@@ -6,10 +6,14 @@ Built as a portfolio project to demonstrate solid software engineering: clear ar
 
 ## Current status
 
-**Phase 2 complete: Backend Core.** The domain model exists (users,
+**Phase 2 complete · Phase 3 · Milestone 1 complete: Semantic Foundation.**
+The domain model exists (users,
 categories, tickets and audit-trail events) and the API exposes full ticket
 management, each ticket's history and a dashboard summary through the
-Routes → Services → Repositories stack.
+Routes → Services → Repositories stack. Milestone 1 of Phase 3 adds the
+semantic layer: per-ticket embeddings stored with pgvector, a free-tier
+Gemini provider behind a small abstraction, and CLI backfill/similarity
+search — still **no AI classification and no search endpoint**.
 
 - `GET /api/health` → `200 {"status": "ok"}` (lightweight, no database query)
 - Ticket endpoints: create, list (paginated + filters), get, partial update
@@ -18,7 +22,12 @@ Routes → Services → Repositories stack.
   trail of a ticket, oldest event first
 - Dashboard summary: `GET /api/dashboard/summary` — status/priority counters
   and unassigned count, computed with SQL aggregates
-- PostgreSQL 17 + Flask-SQLAlchemy + Flask-Migrate wired up
+- Semantic embeddings: `ticket.embedding vector(768)` + `embedding_model`
+  via pgvector (one migration), never blocking ticket writes
+- Embedding CLI: `flask embeddings backfill [--limit N]` (idempotent,
+  pending-only) and `flask embeddings similar` (exact cosine ranking,
+  CLI only — see [Semantic embeddings](#semantic-embeddings-phase-3--milestone-1))
+- PostgreSQL 17 + pgvector + Flask-SQLAlchemy + Flask-Migrate wired up
 - Domain model: `User`, `Category`, `Ticket`, `TicketEvent` (migration applied)
 - Idempotent development seed: `flask seed`
 
@@ -82,9 +91,10 @@ twice never duplicates rows.
 ## Stack
 
 - **Backend:** Python 3.12, Flask (Application Factory + Blueprints), Flask-SQLAlchemy, Flask-Migrate
-- **Database:** PostgreSQL 17 (Docker Compose)
+- **Database:** PostgreSQL 17 + pgvector (Docker Compose)
+- **Embeddings:** Gemini `gemini-embedding-001` free tier (plain httpx, no SDK), plus an in-process fake provider for tests
 - **Tooling:** [uv](https://docs.astral.sh/uv/) for dependency management, pytest
-- **Planned:** pgvector, React + TypeScript, GitHub Actions, deployment
+- **Planned:** React + TypeScript, GitHub Actions, deployment
 
 ## Requirements
 
@@ -147,6 +157,13 @@ cd backend
 uv run pytest
 ```
 
+The suite also contains `postgres`-marked tests that exercise pgvector's
+real operators; they **skip** unless `TEST_DATABASE_URL` points at a
+separate database (see [Semantic embeddings](#semantic-embeddings-phase-3--milestone-1)
+→ Tests and PostgreSQL). The suite can never call a real embedding
+provider: tests are forced onto the fake provider, and any outbound HTTP
+attempt fails the test.
+
 ## Database migrations
 
 Run these from `backend/` with PostgreSQL up:
@@ -171,6 +188,91 @@ Never commit `.env` — it is gitignored.
 | `SECRET_KEY` | Session signing key. **Required in production.** |
 | `DATABASE_URL` | PostgreSQL connection string, e.g. `postgresql+psycopg://user:pass@127.0.0.1:15432/db` |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` / `POSTGRES_PORT` | docker-compose settings (development) |
+| `EMBEDDING_PROVIDER` | `gemini` (default, real calls) \| `fake` (in-process, tests/demos) |
+| `EMBEDDING_MODEL` | Embedding model name, default `gemini-embedding-001` |
+| `EMBEDDING_API_KEY` | Free Gemini key (never commit it). Empty/missing = embeddings disabled, tickets stay valid with `NULL` |
+| `TEST_DATABASE_URL` | Optional: separate database for the `postgres`-marked tests (they skip if unset) |
+
+## Semantic embeddings (Phase 3 · Milestone 1)
+
+Each ticket stores a semantic vector of its text so later milestones can
+find similar tickets and, later still, suggest categories. This milestone
+is the **semantic foundation only**: embedding generation, storage and a
+CLI search — no AI classification, no HTTP endpoint, no frontend.
+
+- **What is embedded:** `Title: {title}\nDescription: {description}`
+  (trimmed). Nothing else — never category (the future label), status,
+  priority, assignee or requester.
+- **Where:** in the **same PostgreSQL**, via the official
+  `pgvector/pgvector:pg17` image: `ticket.embedding vector(768)` and
+  `ticket.embedding_model varchar(64)` (migration `c94d2e81fa63`).
+  No separate vector database or extra service — part of the project's
+  **USD 0** cost rule.
+- **Provider:** Gemini `gemini-embedding-001` (free tier) behind a small
+  `EmbeddingProvider` interface, with a deterministic in-process
+  `FakeEmbeddingProvider` for tests and demos. Plain `httpx`, no SDK.
+  The API key comes only from `EMBEDDING_API_KEY` and is never committed,
+  logged or printed.
+- **Degraded by design:** ticket writes never depend on the provider. The
+  ticket transaction commits first; embedding runs afterwards in a second
+  short commit. If the provider fails, the ticket stays valid with
+  `embedding = NULL` and `flask embeddings backfill` repairs it later.
+  Editing `title`/`description` nulls the vector **in the same PATCH
+  transaction** (a stale vector is never kept) and re-embeds after the
+  commit; editing status, priority, assignee or category does not touch it.
+- **Search:** exact cosine nearest neighbour (`<=>`), ordered by distance
+  ascending, `similarity = 1 - distance`. Deliberately no ANN index
+  (HNSW/IVFFlat) until the table grows, no similarity threshold and no
+  automatic duplicate decisions — a ranking with scores only. Vectors
+  produced by a different `embedding_model` are excluded from results.
+
+### CLI
+
+```bash
+cd backend
+
+# Embed tickets whose embedding is NULL: pending-only, idempotent,
+# one commit per ticket, a failure never aborts the rest, exit code 1
+# if any ticket failed. Small batches only (free-tier friendly).
+uv run flask --app app embeddings backfill
+uv run flask --app app embeddings backfill --limit 10
+
+# Rank stored tickets by semantic similarity (limit 1..20, default 5)
+uv run flask --app app embeddings similar \
+  --title "Laptop will not boot" \
+  --description "Blue screen after Windows update" \
+  --limit 5
+```
+
+Sample output:
+
+```
+Most similar tickets (2):
+  1.0000  SUP-000001  [IN_PROGRESS]  Laptop will not boot
+  0.7724  SUP-000002  [RESOLVED]  Email quota exceeded
+```
+
+There is deliberately **no HTTP endpoint** for search yet, and the demo
+tickets are fictional (no real people, companies or institutions).
+
+### Tests and PostgreSQL
+
+The default suite runs on in-memory SQLite: it creates and round-trips
+the `vector(768)` column fine, but SQLite **cannot execute pgvector
+operators** such as `<=>` — only the real extension can. The
+`postgres`-marked tests in `tests/test_semantic_search.py` cover exactly
+what SQLite cannot (extension present, real vector storage, cosine
+ranking and similarity math) and **skip with a clear message** unless you
+point them at a separate database:
+
+```bash
+cd backend
+# Uncomment TEST_DATABASE_URL in .env (from .env.example), then:
+uv run pytest -q
+```
+
+(That database is created automatically and is separate from your main
+development data, which is never touched.)
 
 ## Domain model
 
@@ -202,18 +304,21 @@ Design decisions:
 backend/
   app/
     api/           # HTTP routes (Blueprints): health, tickets, dashboard, serializers
-    services/      # business rules (ticket_service, dashboard_service)
+    services/      # business rules (ticket_service, dashboard_service, embedding_service)
+    embeddings/    # EmbeddingProvider contract, Gemini/fake providers, text builder
     repositories/  # SQL only (ticket, user, category)
-    commands.py    # Flask CLI (flask seed)
+    commands.py    # Flask CLI (flask seed, flask embeddings)
     config.py      # configuration from environment variables
     errors.py      # ApiError hierarchy → JSON error envelope
     extensions.py  # db (Flask-SQLAlchemy) and migrate (Flask-Migrate)
     models/        # domain model (User, Category, Ticket, TicketEvent)
-  tests/           # pytest, in-memory SQLite (no Docker required)
+  tests/           # pytest, in-memory SQLite (+ optional postgres-marked tests)
   migrations/      # Alembic revisions (Flask-Migrate)
-docker-compose.yml # PostgreSQL 17 service
+docker-compose.yml # PostgreSQL 17 + pgvector service
 ```
 
 Architecture: **Routes → Services → Repositories → PostgreSQL**. Routes stay
 thin (parse input, call the service, serialize), services own validation,
 business rules and the transaction boundary, repositories contain SQL only.
+Embeddings follow the same rule: only the service layer decides when to
+call the provider, and only after the ticket transaction has committed.
