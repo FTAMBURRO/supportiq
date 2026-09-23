@@ -1,0 +1,24 @@
+.bar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.field {
+  min-width: 170px;
+}
+
+.clear {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--accent);
+  background: none;
+  border: none;
+}
+
+.clear:hover {
+  text-decoration: underline;
+}
