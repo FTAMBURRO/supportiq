@@ -1,0 +1,103 @@
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 232px;
+  padding: 20px 14px;
+  background: var(--sidebar-bg);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px 20px;
+}
+
+.logo {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--sidebar-text-active);
+}
+
+.demoBadge {
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sidebar-text);
+  background: var(--sidebar-active-bg);
+  border-radius: 999px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--sidebar-text);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+
+.navLink:hover {
+  color: var(--sidebar-text-active);
+  background: rgb(255 255 255 / 6%);
+  text-decoration: none;
+}
+
+.navLinkActive,
+.navLinkActive:hover {
+  color: var(--sidebar-text-active);
+  background: var(--sidebar-active-bg);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  max-width: 1160px;
+  padding: 32px 40px;
+}
+
+/* Basic responsiveness: sidebar becomes a compact top bar. */
+@media (max-width: 860px) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    padding: 12px 16px;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .brand {
+    padding: 0;
+  }
+
+  .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .main {
+    padding: 20px 16px;
+  }
+}
