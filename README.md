@@ -558,6 +558,28 @@ npm run test     # vitest (pure logic: formatters, transition matrix)
   `Confidence score: XX%` (the heuristic — see
   [Automatic classification](#automatic-classification-phase-3--milestone-2)).
 
+## Continuous Integration
+
+One GitHub Actions workflow, [`.github/workflows/ci.yml`](.github/workflows/ci.yml),
+runs on every **push to `main`** and every **pull request targeting `main`**.
+It only validates — there is deliberately no deploy step.
+
+- **Backend job:** Python 3.12 + uv, dependencies installed reproducibly
+  from `backend/uv.lock` (`uv sync --frozen`), then `pytest`. A
+  `pgvector/pgvector:pg17` service container (same image family as
+  `docker-compose.yml`) provides PostgreSQL 17 through an ephemeral
+  `TEST_DATABASE_URL` with fictional CI-only credentials: the unmarked
+  tests run on in-memory SQLite and the nine `postgres`-marked tests
+  create their own isolated database and enable the vector extension —
+  one run covers both dialects.
+- **Frontend job:** Node 22, `npm ci` from `package-lock.json`, then
+  `npm run lint`, `npm run test`, `npm run build`.
+
+Gemini is never touched in CI: no API key, no secret, no external
+embedding call (`TestingConfig` pins the fake provider and the conftest
+blocks any outbound HTTP). The workflow uses only public runners and
+containers: **USD 0**.
+
 ## Domain model
 
 Four entities, designed for integrity, traceability and a future AI
