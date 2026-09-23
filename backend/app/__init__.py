@@ -8,6 +8,7 @@ from werkzeug.exceptions import HTTPException
 
 from app.config import config_by_name
 from app.extensions import db, migrate
+from app.spa import register_spa
 
 
 def create_app(config_name: str | None = None) -> Flask:
@@ -41,6 +42,9 @@ def create_app(config_name: str | None = None) -> Flask:
     app.register_blueprint(api)
     _register_error_handlers(app)
     _register_commands(app)
+    # SPA serving (Option B): registered last so /api/* rules always
+    # take precedence over the catch-all fallback.
+    register_spa(app)
 
     return app
 

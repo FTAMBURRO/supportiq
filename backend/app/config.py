@@ -1,6 +1,7 @@
 """Application configuration loaded from environment variables."""
 
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -43,6 +44,12 @@ class Config:
     # postgresql+psycopg://supportiq:supportiq@localhost:5432/supportiq
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Built React SPA served by Flask itself (Fase 6 · Option B: a
+    # single same-origin service — no CORS, no separate static host).
+    # Computed relative to this file: <repo>/frontend/dist, regardless
+    # of the working directory. Tests clear it (see TestingConfig).
+    SPA_DIST_DIR = str(Path(__file__).resolve().parents[2] / "frontend" / "dist")
 
     # Embeddings (Fase 3). The API key only ever comes from the
     # environment: never committed, logged, printed or put in tests.
@@ -102,11 +109,22 @@ class TestingConfig(Config):
     # in the shell must never flip the suite's default.
     CLASSIFICATION_ENABLED = False
 
+    # SPA serving off by default in tests: behaviour must never depend
+    # on whether frontend/dist happens to exist on this machine. SPA
+    # tests point this at a temporary fixture directory instead.
+    SPA_DIST_DIR = ""
+
 
 class ProductionConfig(Config):
     """Configuration for production deployments."""
 
     DEBUG = False
+
+    # Reads the environment; the default stays true (like the base
+    # config) but production launches with CLASSIFICATION_ENABLED=false
+    # until real Gemini embeddings are configured. A typo still fails
+    # loudly at startup.
+    CLASSIFICATION_ENABLED = env_flag("CLASSIFICATION_ENABLED", True)
 
     @staticmethod
     def init_app(app):
