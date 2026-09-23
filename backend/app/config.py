@@ -21,6 +21,14 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # Embeddings (Fase 3). The API key only ever comes from the
+    # environment: never committed, logged, printed or put in tests.
+    EMBEDDING_PROVIDER = os.environ.get("EMBEDDING_PROVIDER", "gemini")
+    EMBEDDING_MODEL = os.environ.get(
+        "EMBEDDING_MODEL", "gemini-embedding-001"
+    )
+    EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY")
+
 
 class DevelopmentConfig(Config):
     """Configuration for local development."""
@@ -38,6 +46,11 @@ class TestingConfig(Config):
     TESTING = True
     SECRET_KEY = "test-secret-key"
     SQLALCHEMY_DATABASE_URI = "sqlite://"
+
+    # Guarantee the suite can never reach a real provider: embeddings are
+    # generated in-process by FakeEmbeddingProvider. tests/conftest.py adds
+    # a second, explicit layer: any outbound HTTP call fails the test.
+    EMBEDDING_PROVIDER = "fake"
 
 
 class ProductionConfig(Config):
